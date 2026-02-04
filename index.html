@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SIP / Lump Sum Details | FinTrust Creations</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:#f4f6f8}
+.container{max-width:720px;margin:20px auto;padding:12px}
+.card{background:#fff;border-radius:14px;box-shadow:0 6px 18px rgba(0,0,0,.08);padding:18px}
+
+.header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.logo{width:46px;height:46px;border-radius:50%;background:#18a572;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:bold}
+.brand{font-size:20px;font-weight:bold;color:#18a572}
+
+h2{text-align:center;color:#2e7d32;margin:10px 0}
+
+.field{position:relative;margin-bottom:10px}
+.input, select{
+  width:100%;
+  padding:12px;
+  font-size:16px;
+  border:1px solid #ccc;
+  border-radius:8px;
+}
+
+.suggestions{
+  position:absolute;top:100%;left:0;right:0;
+  background:#fff;border:1px solid #ddd;border-radius:8px;
+  max-height:160px;overflow:auto;display:none;z-index:999
+}
+.item{padding:10px;font-size:14px;cursor:pointer;border-bottom:1px solid #eee}
+.item:hover{background:#f1f8f4}
+
+button{
+  width:100%;padding:12px;font-size:16px;
+  border:none;border-radius:8px;
+  color:#fff;background:#2e7d32;
+  cursor:pointer;margin-top:10px
+}
+.reset{background:#9e9e9e}
+.whatsapp{background:#25D366}
+.email{background:#1976D2}
+
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+th,td{border:1px solid #ddd;padding:10px;font-size:14px;text-align:center}
+th{background:#e8f5e9;color:#2e7d32}
+
+.footer{text-align:center;font-size:12px;color:#777;margin-top:16px}
+.error{text-align:center;color:#c62828;margin-top:10px}
+</style>
+</head>
+
+<body>
+<div class="container">
+<div class="card">
+
+<div class="header">
+  <div class="logo">FC</div>
+  <div class="brand">FinTrust Creations</div>
+</div>
+
+<h2>📊 SIP / Lump Sum – Year-wise Details</h2>
+
+<div class="field">
+  <select id="mode">
+    <option value="">Select Investment Type</option>
+    <option value="sip">SIP (Monthly)</option>
+    <option value="lumpsum">Lump Sum (One Time)</option>
+  </select>
+</div>
+
+<div class="field">
+  <input id="amount" class="input" type="number" placeholder="Investment Amount (Rs.)">
+</div>
+
+<div class="field">
+  <input id="years" class="input" type="number" placeholder="Investment Period (Years)">
+</div>
+
+<div class="field">
+  <input id="scheme" class="input" placeholder="Select Mutual Fund Scheme">
+  <div id="suggestions" class="suggestions"></div>
+</div>
+
+<button onclick="calculate()">Show Details</button>
+<button class="reset" onclick="resetForm()">Reset</button>
+
+<div id="result"></div>
+
+<button id="waBtn" class="whatsapp" style="display:none" onclick="shareWhatsApp()">📤 Share on WhatsApp</button>
+<button id="mailBtn" class="email" style="display:none" onclick="shareEmail()">📧 Share via Email</button>
+
+<div id="error" class="error"></div>
+
+<div class="footer">
+© <span id="y"></span> FinTrust Creations<br>
+Mutual fund investments are subject to market risks.
+</div>
+
+</div>
+</div>
+
+<script>
+document.getElementById("y").textContent=new Date().getFullYear();
+
+let schemes=[], schemeCode="";
+let shareText="", emailBody="";
+
+fetch("https://api.mfapi.in/mf").then(r=>r.json()).then(d=>schemes=d);
+
+/* AUTOCOMPLETE */
+const input=document.getElementById("scheme");
+const sug=document.getElementById("suggestions");
+
+input.addEventListener("input",()=>{
+  const q=input.value.toLowerCase();
+  sug.innerHTML=""; schemeCode="";
+  if(q.length<3){sug.style.display="none";return;}
+
+  schemes.filter(s=>s.schemeName.toLowerCase().includes(q))
+    .slice(0,10).forEach(s=>{
+      const d=document.createElement("div");
+      d.className="item";
+      d.textContent=s.schemeName;
+      d.onclick=()=>{
+        input.value=s.schemeName;
+        schemeCode=s.schemeCode;
+        sug.style.display="none";
+      };
+      sug.appendChild(d);
+    });
+  sug.style.display="block";
+});
+
+/* HELPERS */
+function parseDate(d){const p=d.split("-");return new Date(p[2],p[1]-1,p[0]);}
+function findNAV(list,date){return list.find(n=>parseDate(n.date)<=date);}
+function cagr(c,p,y){return ((c/p)**(1/y)-1)*100;}
+function sipFV(p,r,n){
+ r=r/100/12;
+ return p*((Math.pow(1+r,n)-1)/r)*(1+r);
+}
+
+/* LOAD SCHEME */
+async function loadScheme(code){
+ const r=await fetch("https://api.mfapi.in/mf/"+code);
+ return await r.json();
+}
+
+/* CALCULATE */
+async function calculate(){
+ const mode=document.getElementById("mode").value;
+ const amt=+amount.value, yrs=+years.value;
+ const err=document.getElementById("error");
+ const res=document.getElementById("result");
+
+ err.textContent=""; res.innerHTML="";
+ waBtn.style.display=mailBtn.style.display="none";
+
+ if(!mode||!amt||!yrs||!schemeCode){
+  err.textContent="Please select investment type, amount, years and scheme.";
+  return;
+ }
+
+ const data=await loadScheme(schemeCode);
+ const navs=data.data;
+ const now=new Date();
+
+ let rows="";
+ shareText = `📊 ${mode==="sip"?"SIP":"Lump Sum"} Investment Details\n\n`;
+ shareText+=`Scheme: ${input.value}\n`;
+ shareText+=`Amount: Rs. ${amt.toLocaleString("en-IN")}\n`;
+ shareText+=`Period: ${yrs} Years\n\n`;
+
+ for(let y=1;y<=yrs;y++){
+   let invested, value="N/A", rate="N/A";
+
+   invested = mode==="sip" ? amt*12*y : amt;
+
+   const pastDate=new Date();
+   pastDate.setFullYear(now.getFullYear()-y);
+
+   const past=findNAV(navs,pastDate);
+   const latest=findNAV(navs,now);
+
+   if(past && latest){
+     const r=cagr(latest.nav,past.nav,y);
+     rate=r.toFixed(2)+"%";
+
+     value = mode==="sip"
+       ? "Rs. "+Math.round(sipFV(amt,r,y*12)).toLocaleString("en-IN")
+       : "Rs. "+Math.round(amt*Math.pow(1+r/100,y)).toLocaleString("en-IN");
+   }
+
+   rows+=`
+   <tr>
+     <td>${y}Y</td>
+     <td>Rs. ${invested.toLocaleString("en-IN")}</td>
+     <td><b>${value}</b></td>
+     <td>${rate}</td>
+   </tr>`;
+
+   shareText+=
+`Year ${y}
+Invested: Rs. ${invested.toLocaleString("en-IN")}
+Value: ${value}
+Return: ${rate}
+
+`;
+ }
+
+ shareText+=`-------------------\nFinTrust Creations`;
+
+ res.innerHTML=`
+ <div class="table-wrap">
+ <table>
+  <tr>
+    <th>Year</th>
+    <th>Total Invested</th>
+    <th>Value</th>
+    <th>% Earned</th>
+  </tr>
+  ${rows}
+ </table>
+ </div>`;
+
+ emailBody=shareText;
+ waBtn.style.display=mailBtn.style.display="block";
+}
+
+/* RESET */
+function resetForm(){
+ mode.value=""; amount.value=""; years.value="";
+ scheme.value=""; schemeCode="";
+ suggestions.style.display="none";
+ result.innerHTML=""; error.textContent="";
+ waBtn.style.display=mailBtn.style.display="none";
+}
+
+/* SHARE */
+function shareWhatsApp(){
+ window.open("https://wa.me/?text="+encodeURIComponent(shareText),"_blank");
+}
+function shareEmail(){
+ location.href="mailto:?subject=Investment Details&body="+encodeURIComponent(emailBody);
+}
+</script>
+
+<!-- BACK BUTTON - LEFT ARROW (Same style as scroll top) -->
+<style>
+#backBtn {
+  position: fixed;
+  left: 20px;
+  bottom: 25px;
+  width: 55px;
+  height: 55px;
+  background-color: #f2f2f2;  /* off-white */
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+#backBtn svg {
+  width: 22px;
+  height: 22px;
+  fill: none;
+  stroke: #000000;      /* BLACK arrow */
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Hover effect */
+#backBtn:hover {
+  background-color: #e6e6e6;
+  box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+}
+</style>
+
+<a href="https://rethna1.github.io/fintrust140/" id="backBtn" title="Back">
+  <svg viewBox="0 0 24 24">
+    <!-- LEFT POINTING ARROW (same style as scroll button) -->
+    <path d="M15 6l-6 6 6 6" />
+  </svg>
+</a>
+
+</body>
+</html>
