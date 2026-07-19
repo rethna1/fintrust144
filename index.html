@@ -86,7 +86,10 @@ th{background:#e8f5e9;color:#2e7d32}
   <div id="suggestions" class="suggestions"></div>
 </div>
 
-<button onclick="calculate()">Show Details</button>
+<button id="calcBtn" onclick="calculate()" disabled>
+Loading Schemes...
+</button>
+
 <button class="reset" onclick="resetForm()">Reset</button>
 
 <div id="result"></div>
@@ -110,7 +113,23 @@ document.getElementById("y").textContent=new Date().getFullYear();
 let schemes=[], schemeCode="";
 let shareText="", emailBody="";
 
-fetch("https://api.mfapi.in/mf").then(r=>r.json()).then(d=>schemes=d);
+fetch("https://api.mfapi.in/mf")
+.then(r=>r.json())
+.then(d=>{
+
+    schemes=d;
+
+    const btn=document.getElementById("calcBtn");
+    btn.disabled=false;
+    btn.textContent="Show Details";
+
+})
+.catch(()=>{
+
+    document.getElementById("error").textContent=
+    "Unable to load scheme list. Please check your internet.";
+
+});
 
 /* AUTOCOMPLETE */
 const input=document.getElementById("scheme");
@@ -166,7 +185,15 @@ async function calculate(){
   return;
  }
 
- const data=await loadScheme(schemeCode);
+const btn=document.getElementById("calcBtn");
+btn.disabled=true;
+
+btn.textContent="Loading Details...";
+
+try{
+
+const data=await loadScheme(schemeCode);
+
  const navs=data.data;
  const now=new Date();
 
@@ -230,6 +257,20 @@ Return: ${rate}
 
  emailBody=shareText;
  waBtn.style.display=mailBtn.style.display="block";
+
+btn.disabled=false;
+btn.textContent="Show Details";
+
+}
+catch{
+
+    err.textContent=
+    "Unable to load scheme details. Please check your internet.";
+
+    btn.disabled=false;
+    btn.textContent="Show Details";
+}
+
 }
 
 /* RESET */
@@ -249,50 +290,6 @@ function shareEmail(){
  location.href="mailto:?subject=Investment Details&body="+encodeURIComponent(emailBody);
 }
 </script>
-
-<!-- BACK BUTTON - LEFT ARROW (Same style as scroll top) -->
-<style>
-#backBtn {
-  position: fixed;
-  left: 20px;
-  bottom: 25px;
-  width: 55px;
-  height: 55px;
-  background-color: #f2f2f2;  /* off-white */
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.25);
-  z-index: 9999;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
-}
-
-#backBtn svg {
-  width: 22px;
-  height: 22px;
-  fill: none;
-  stroke: #000000;      /* BLACK arrow */
-  stroke-width: 4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Hover effect */
-#backBtn:hover {
-  background-color: #e6e6e6;
-  box-shadow: 0 6px 15px rgba(0,0,0,0.3);
-}
-</style>
-
-<a href="https://rethna1.github.io/fintrust140/" id="backBtn" title="Back">
-  <svg viewBox="0 0 24 24">
-    <!-- LEFT POINTING ARROW (same style as scroll button) -->
-    <path d="M15 6l-6 6 6 6" />
-  </svg>
-</a>
 
 </body>
 </html>
